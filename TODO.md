@@ -11,15 +11,13 @@
 - [ ] Парсер каталога Greenway (`src/parsers/greenwayParser.js`) — заменить заглушечные селекторы на реальные после изучения личного кабинета greenwayglobal.com
 - [ ] Определить, откуда брать данные о заказах/PV клиентов (личный кабинет партнёра, если есть API/экспорт) — сейчас таблица `sales` не наполняется автоматически
 - [ ] Cron job для ежедневного обновления каталога товаров
-- [ ] Security review: CORS, проверка JWT/bcrypt, защита от SQL injection (параметризация уже используется, но нужен формальный аудит)
 
 ## 🟡 Важно
 
-- [ ] E2E-тесты Telegram-бота (симуляция пользователя через telegraf test helpers)
 - [ ] Автоматическое обновление `clients.last_order_date` / `total_pv` при поступлении новых продаж (нет источника данных о продажах — см. пункт про личный кабинет)
 - [ ] Deeplink на реферальную ссылку партнёра в сообщениях клиенту (сценарий 1 user flow клиента)
-- [ ] Backup-скрипт для SQLite (ежедневный, согласно чек-листу спецификации)
 - [ ] Персонализированные рекомендации в цепочках (сейчас топ-3 товара по PV для всех, без учёта категорий клиента — нужна таблица позиций заказа, которой пока нет в схеме)
+- [ ] `bull` тянет уязвимую версию `uuid` (moderate, GHSA-w5hq-g745-h8pq) — фикс требует мажорного апгрейда `bull` (breaking change для очередей уведомлений), нужно тестировать отдельно перед апгрейдом
 
 ## 🟢 Желательно / Phase 2+
 
@@ -30,8 +28,9 @@
 - [ ] 2FA для партнёров
 - [ ] Экспорт отчётов, dashboard аналитики
 - [ ] Мультиязычность
-- [ ] Nginx + SSL (Let's Encrypt) продакшен-деплой скрипты
-- [ ] Мониторинг/healthcheck для Docker-сервисов
+- [ ] Отдельный (более строгий) rate limit на `POST /partners/:id/clients`
+- [ ] Ротация JWT-секрета / отзыв токенов (blacklist или refresh-токены) — сейчас токен живёт 7 дней без принудительного logout
+- [ ] Явно настроить `helmet` под чистый JSON API (например, отключить `contentSecurityPolicy`/`crossOriginEmbedderPolicy`, если не появится сторонних интеграций) — сейчас включён с дефолтными настройками, для API это безопасно, но не оптимально
 
 ---
 
@@ -50,3 +49,8 @@
 - [x] Cron-планировщик цепочек (`src/scheduler/chainsCron.js`, ежедневно) + `chainsService.checkAndNotifyChains` реально проверяет `last_order_date` и ставит уведомления в очередь `chain-notifications`
 - [x] Воркер бота теперь обрабатывает обе очереди уведомлений (`deadline-notifications` и `chain-notifications`)
 - [x] API для удаления клиента и полного удаления данных партнёра (`DELETE /partners/:id`, право на удаление по ФЗ-152)
+- [x] Backup-скрипт для SQLite (`scripts/backup-db.sh`, ежедневно, retention по `BACKUP_RETENTION_DAYS`)
+- [x] Docker healthcheck для `app` (`curl /health`) и `redis` (`redis-cli ping`) в `docker/docker-compose.yml`
+- [x] Пример конфига Nginx + инструкция по SSL (Let's Encrypt/certbot) — `docker/nginx.conf.example`, README раздел «Деплой»
+- [x] E2E-тесты Telegram-бота (`tests/e2e/bot.e2e.test.js`, 15 тестов: регистрация, PV-Подборщик, цепочки, настройки, удаление данных)
+- [x] Security review: добавлены `helmet`, CORS-белый список (`ALLOWED_ORIGINS`), лимит размера тела запроса, проверка `JWT_SECRET` при старте в проде (`assertProductionSecrets`), rate limiting расширен на `/pv-calc/search` и `/partners/:id/settings`/`DELETE`, логирование `ctx.update` в боте очищено от ПДн, удалена неиспользуемая зависимость `bcrypt` (заодно убрала критическую уязвимость в её транзитивной цепочке); SQL injection — аудит пройден, везде параметризованные запросы

@@ -55,6 +55,57 @@ tests/
 - [ ] Парсер каталога Greenway — селекторы-заглушки, требуют уточнения после доступа к реальной разметке сайта / личного кабинета
 - [ ] Cron job для ежедневного обновления каталога
 - [ ] Security review (JWT/bcrypt hardening, CORS)
-- [ ] Docker production deployment (SSL, Nginx, backups)
+- [x] Docker production deployment (SSL/Nginx пример конфига, healthcheck'и, backup-скрипт SQLite — см. раздел «Деплой» ниже)
 
 Полный и приоритизированный список — в `TODO.md`.
+
+## Деплой
+
+### Docker
+
+```bash
+docker compose -f docker/docker-compose.yml up -d --build
+```
+
+Сервисы `app` и `redis` снабжены Docker healthcheck'ами (`app` — `curl http://localhost:3000/health`, `redis` — `redis-cli ping`), статус смотрите через `docker compose ps` или `docker inspect --format='{{.State.Health.Status}}' <container>`.
+
+### Nginx + SSL (Let's Encrypt)
+
+Пример конфига — `docker/nginx.conf.example` (reverse proxy на `app:3000`/`127.0.0.1:3000`, с местом под сертификаты).
+
+1. Установите nginx и certbot на сервере:
+   ```bash
+   sudo apt-get install -y nginx certbot python3-certbot-nginx
+   ```
+2. Скопируйте пример конфига и поправьте `server_name`:
+   ```bash
+   sudo cp docker/nginx.conf.example /etc/nginx/sites-available/greenway-bot.conf
+   sudo ln -s /etc/nginx/sites-available/greenway-bot.conf /etc/nginx/sites-enabled/
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+3. Получите сертификат Let's Encrypt (webroot или через certbot-плагин nginx):
+   ```bash
+   sudo certbot --nginx -d example.com
+   # или, если используется webroot из примера конфига:
+   sudo certbot certonly --webroot -w /var/www/certbot -d example.com
+   ```
+4. Перезапустите nginx после выпуска/обновления сертификата:
+   ```bash
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+   Certbot по умолчанию сам настраивает автопродление сертификата (systemd timer / cron); `nginx -s reload` при этом можно добавить в `--deploy-hook`.
+
+### Backup SQLite
+
+Скрипт `scripts/backup-db.sh` делает согласованный снимок SQLite-базы (через `sqlite3 <db> ".backup <dest>"`, либо запасной вариант с WAL checkpoint + копированием файла) в директорию `backups/` и удаляет бэкапы старше `BACKUP_RETENTION_DAYS` дней (по умолчанию 14).
+
+```bash
+chmod +x scripts/backup-db.sh   # уже исполняемый в репозитории
+SQLITE_PATH=./data/greenway.db BACKUP_DIR=./backups BACKUP_RETENTION_DAYS=14 ./scripts/backup-db.sh
+```
+
+Пример строки для cron (ежедневно в 03:30):
+
+```
+30 3 * * * cd /path/to/MLMBot && SQLITE_PATH=./data/greenway.db BACKUP_DIR=./backups BACKUP_RETENTION_DAYS=14 ./scripts/backup-db.sh >> ./backups/backup.log 2>&1
+```
