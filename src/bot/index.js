@@ -5,6 +5,7 @@ const { registerStartHandler } = require('./handlers/start');
 const { registerPvCalcHandler } = require('./handlers/pvCalc');
 const { registerChainsHandler } = require('./handlers/chains');
 const { registerDeadlinesHandler } = require('./handlers/deadlines');
+const { registerSettingsHandler } = require('./handlers/settings');
 
 if (!config.botToken) {
   logger.error('BOT_TOKEN is not set. Add it to .env before starting the bot.');
@@ -19,6 +20,7 @@ registerStartHandler(bot);
 registerPvCalcHandler(bot);
 registerChainsHandler(bot);
 registerDeadlinesHandler(bot);
+registerSettingsHandler(bot);
 
 bot.hears('❓ Помощь', (ctx) =>
   ctx.reply(

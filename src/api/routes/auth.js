@@ -1,8 +1,19 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const Joi = require('joi');
 const authService = require('../services/authService');
 
 const router = express.Router();
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Слишком много попыток. Повторите позже.' },
+});
+
+router.use(authLimiter);
 
 const registerSchema = Joi.object({
   telegram_id: Joi.number().integer().required(),
