@@ -1,10 +1,21 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const Joi = require('joi');
 const { getDb } = require('../../database/db');
 const { requireAuth } = require('../middleware/auth');
 const { logAudit } = require('../../utils/audit');
 
 const router = express.Router();
+
+// Throttle sensitive write endpoints (settings changes, full account
+// erasure) to reduce abuse/DoS risk beyond normal usage patterns.
+const sensitiveWriteLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Слишком много запросов. Повторите позже.' },
+});
 
 router.get('/me', requireAuth, (req, res) => {
   const db = getDb();
@@ -71,7 +82,7 @@ const settingsSchema = Joi.object({
   timezone: Joi.string().max(50),
 }).min(1);
 
-router.put('/:id/settings', requireAuth, ensureOwnPartner, (req, res) => {
+router.put('/:id/settings', sensitiveWriteLimiter, requireAuth, ensureOwnPartner, (req, res) => {
   const { error, value } = settingsSchema.validate(req.body);
   if (error) return res.status(400).json({ error: error.message });
 
@@ -96,7 +107,7 @@ router.put('/:id/settings', requireAuth, ensureOwnPartner, (req, res) => {
 });
 
 // Право на удаление данных (ФЗ-152)
-router.delete('/:id', requireAuth, ensureOwnPartner, (req, res) => {
+router.delete('/:id', sensitiveWriteLimiter, requireAuth, ensureOwnPartner, (req, res) => {
   const db = getDb();
   const deleteAll = db.transaction((partnerId) => {
     const clientIds = db.prepare('SELECT id FROM clients WHERE partner_id = ?').all(partnerId).map((c) => c.id);

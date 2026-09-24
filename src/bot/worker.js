@@ -4,6 +4,8 @@ const config = require('../config');
 const logger = require('../utils/logger');
 const { getDb } = require('../database/db');
 
+config.assertProductionSecrets();
+
 if (!config.botToken) {
   logger.error('BOT_TOKEN is not set. Add it to .env before starting the worker.');
   process.exit(1);

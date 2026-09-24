@@ -7,6 +7,8 @@ const { registerChainsHandler } = require('./handlers/chains');
 const { registerDeadlinesHandler } = require('./handlers/deadlines');
 const { registerSettingsHandler } = require('./handlers/settings');
 
+config.assertProductionSecrets();
+
 if (!config.botToken) {
   logger.error('BOT_TOKEN is not set. Add it to .env before starting the bot.');
   process.exit(1);
@@ -33,7 +35,14 @@ bot.hears('❓ Помощь', (ctx) =>
 );
 
 bot.catch((err, ctx) => {
-  logger.error('Bot error', { error: err.message, update: ctx.update });
+  // Avoid logging the full update object: it can contain PII (phone numbers,
+  // names, free-text messages) that should not land in plaintext logs (ФЗ-152).
+  logger.error('Bot error', {
+    error: err.message,
+    updateId: ctx.update && ctx.update.update_id,
+    updateType: ctx.updateType,
+    chatId: ctx.chat && ctx.chat.id,
+  });
 });
 
 bot.launch();

@@ -1,10 +1,21 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const Joi = require('joi');
 const { getDb } = require('../../database/db');
 const { requireAuth } = require('../middleware/auth');
 const pvCalcService = require('../services/pvCalc');
 
 const router = express.Router();
+
+// The DP search is the most CPU-heavy endpoint in the API; limit how often
+// a single client can trigger it to reduce DoS risk.
+const searchLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Слишком много запросов. Повторите позже.' },
+});
 
 const searchSchema = Joi.object({
   target_pv: Joi.number().positive(),
@@ -13,7 +24,7 @@ const searchSchema = Joi.object({
   excluded_categories: Joi.array().items(Joi.string()).default([]),
 }).xor('target_pv', 'target_price');
 
-router.post('/search', requireAuth, (req, res) => {
+router.post('/search', searchLimiter, requireAuth, (req, res) => {
   const { error, value } = searchSchema.validate(req.body);
   if (error) return res.status(400).json({ error: error.message });
 

@@ -3,6 +3,8 @@ const config = require('./config');
 const logger = require('./utils/logger');
 const { startChainsCron } = require('./scheduler/chainsCron');
 
+config.assertProductionSecrets();
+
 const app = createApp();
 
 app.listen(config.port, () => {
