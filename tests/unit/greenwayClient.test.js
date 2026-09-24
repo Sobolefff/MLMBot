@@ -66,6 +66,17 @@ describe('GreenwayClient', () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
+  test.each([403, 429])(
+    'throws a POSSIBLY_BLOCKED error on %d without retrying (never hammer a rate-limit/ban response)',
+    async (status) => {
+      global.fetch = mockFetchOnce(status, { detail: 'blocked' });
+      const client = new GreenwayClient('token-123', { minIntervalMs: 0 });
+
+      await expect(client.getMainSummary()).rejects.toMatchObject({ code: 'POSSIBLY_BLOCKED' });
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    }
+  );
+
   test('retries on transient failure and succeeds', async () => {
     global.fetch = jest
       .fn()
@@ -84,6 +95,6 @@ describe('GreenwayClient', () => {
     const client = new GreenwayClient('token-123', { minIntervalMs: 0 });
 
     await expect(client.getMainSummary()).rejects.toThrow('down');
-    expect(global.fetch).toHaveBeenCalledTimes(3); // initial + 2 retries
+    expect(global.fetch).toHaveBeenCalledTimes(2); // initial + 1 retry (kept low — see MAX_RETRIES comment in client.js)
   });
 });

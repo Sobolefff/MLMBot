@@ -1,7 +1,14 @@
 const config = require('../config');
 const logger = require('../utils/logger');
 
-const MAX_RETRIES = 2;
+// Kept deliberately low: on 2026-09-24 a handful of manual sync attempts in
+// quick succession (well under what MAX_RETRIES=2 alone would produce) was
+// enough to get the user's IPs temporarily blocked by Greenway. Retrying a
+// failed request here is not free — treat every attempt as consuming budget
+// against a real anti-bot system on someone's actual income-generating
+// account, not a generic API to hammer through transient errors.
+const MAX_RETRIES = 1;
+const RETRY_BASE_DELAY_MS = 2000;
 
 /**
  * Thin, throttled wrapper over the JSON API that greenwayglobal.com's SPA
@@ -54,20 +61,32 @@ class GreenwayClient {
         if (res.status === 401) {
           throw Object.assign(new Error('Greenway access token expired or invalid'), { code: 'TOKEN_EXPIRED' });
         }
+        if (res.status === 403 || res.status === 429) {
+          // Possible rate-limit/anti-bot response — do not retry, this is
+          // exactly the kind of request volume that got a real account's
+          // IPs blocked on 2026-09-24. Surface it and let the caller decide
+          // whether to back off entirely rather than hammering further.
+          throw Object.assign(new Error(`Greenway API ${pathForLogs} returned ${res.status} (possible rate limit/block)`), {
+            code: 'POSSIBLY_BLOCKED',
+          });
+        }
         if (!res.ok) {
           throw new Error(`Greenway API ${pathForLogs} returned ${res.status}`);
         }
         return await res.json();
       } catch (err) {
         lastError = err;
-        if (err.code === 'TOKEN_EXPIRED') throw err;
-        logger.error('Greenway API request failed, retrying', {
+        if (err.code === 'TOKEN_EXPIRED' || err.code === 'POSSIBLY_BLOCKED') throw err;
+        const willRetry = attempt < MAX_RETRIES;
+        logger.error(willRetry ? 'Greenway API request failed, retrying' : 'Greenway API request failed, giving up', {
           path: pathForLogs,
           attempt,
           error: err.message,
           cause: err.cause ? `${err.cause.code || ''} ${err.cause.message || err.cause}`.trim() : undefined,
         });
-        await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+        if (willRetry) {
+          await new Promise((resolve) => setTimeout(resolve, RETRY_BASE_DELAY_MS * (attempt + 1)));
+        }
       }
     }
     throw lastError;

@@ -45,5 +45,8 @@ module.exports = {
   // (команда/финансы/PRO-бонус), не публичный каталог товаров.
   gwApiBaseUrl: process.env.GW_API_BASE_URL || 'https://pyapi.greenwaystart.com/pyapi/v1/',
   gwTokenEncKey: process.env.GREENWAY_TOKEN_ENC_KEY || '',
-  gwRequestMinIntervalMs: parseInt(process.env.GW_REQUEST_MIN_INTERVAL_MS, 10) || 1000,
+  // Conservative default after a real block incident on 2026-09-24 (see
+  // memory `reference-greenway-pyapi`) — a handful of requests in quick
+  // succession was enough to get a real account's IPs temporarily blocked.
+  gwRequestMinIntervalMs: parseInt(process.env.GW_REQUEST_MIN_INTERVAL_MS, 10) || 3000,
 };
