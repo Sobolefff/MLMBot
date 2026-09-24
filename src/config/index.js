@@ -41,4 +41,9 @@ module.exports = {
   defaultTimezone: process.env.DEFAULT_TIMEZONE || 'Europe/Moscow',
   allowedOrigins,
   assertProductionSecrets,
+  // Личный кабинет партнёра (pyapi.greenwaystart.com) — бизнес-аналитика
+  // (команда/финансы/PRO-бонус), не публичный каталог товаров.
+  gwApiBaseUrl: process.env.GW_API_BASE_URL || 'https://pyapi.greenwaystart.com/pyapi/v1/',
+  gwTokenEncKey: process.env.GREENWAY_TOKEN_ENC_KEY || '',
+  gwRequestMinIntervalMs: parseInt(process.env.GW_REQUEST_MIN_INTERVAL_MS, 10) || 1000,
 };

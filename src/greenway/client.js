@@ -1,0 +1,137 @@
+const config = require('../config');
+const logger = require('../utils/logger');
+
+const MAX_RETRIES = 2;
+
+/**
+ * Thin, throttled wrapper over the JSON API that greenwayglobal.com's SPA
+ * calls (pyapi.greenwaystart.com). All endpoints below were confirmed
+ * manually via DevTools on 2026-09-24 — see memory `reference-greenway-pyapi`
+ * for the recon notes. This does NOT cover the product catalog (price/PV) —
+ * that's a separate, still-unconfirmed data source (see src/parsers/).
+ *
+ * One instance per partner token, since each request needs that partner's
+ * bearer token and Greenway may rate-limit/flag per-account polling.
+ */
+class GreenwayClient {
+  constructor(accessToken, { baseUrl = config.gwApiBaseUrl, minIntervalMs = config.gwRequestMinIntervalMs } = {}) {
+    if (!accessToken) throw new Error('GreenwayClient requires an accessToken');
+    this.accessToken = accessToken;
+    this.baseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+    this.minIntervalMs = minIntervalMs;
+    this.lastRequestAt = 0;
+  }
+
+  async _throttle() {
+    const wait = this.minIntervalMs - (Date.now() - this.lastRequestAt);
+    if (wait > 0) {
+      await new Promise((resolve) => setTimeout(resolve, wait));
+    }
+  }
+
+  async _get(path, params = {}) {
+    await this._throttle();
+    const url = new URL(path, this.baseUrl);
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== null) url.searchParams.set(key, value);
+    }
+
+    let lastError;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      this.lastRequestAt = Date.now();
+      try {
+        const res = await fetch(url, {
+          headers: { Authorization: `Bearer ${this.accessToken}`, Accept: 'application/json' },
+        });
+        if (res.status === 401) {
+          throw Object.assign(new Error('Greenway access token expired or invalid'), { code: 'TOKEN_EXPIRED' });
+        }
+        if (!res.ok) {
+          throw new Error(`Greenway API ${path} returned ${res.status}`);
+        }
+        return await res.json();
+      } catch (err) {
+        lastError = err;
+        if (err.code === 'TOKEN_EXPIRED') throw err;
+        logger.error('Greenway API request failed, retrying', { path, attempt, error: err.message });
+        await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+      }
+    }
+    throw lastError;
+  }
+
+  // --- Общее / авторизация ---
+  getMainSummary() {
+    return this._get('greenway/main/');
+  }
+
+  getAuthInfo() {
+    return this._get('auth/info/');
+  }
+
+  // --- Структура команды ---
+  getPartnerList({ withFilterParams = 1, showAll = 0, sortBy = 'default', page = 1, perPage = 50 } = {}) {
+    return this._get('greenway/office/partner/list/', {
+      with_filter_params: withFilterParams,
+      show_all: showAll,
+      sort_by: sortBy,
+      page,
+      per_page: perPage,
+    });
+  }
+
+  // --- Аналитика ПРО ---
+  getPeriods() {
+    return this._get('greenway/analytics-2/periods/');
+  }
+
+  getMainView(partnerId) {
+    return this._get(`greenway/analytics-2/main-view/${partnerId}/`);
+  }
+
+  getProBonus(partnerId) {
+    return this._get(`greenway/analytics-2/pro-bonus/${partnerId}/`);
+  }
+
+  getDynamicStructure(partnerId) {
+    return this._get(`greenway/analytics-2/dynamic-structure/${partnerId}/`);
+  }
+
+  getFirstLineRegistrationsActivations(partnerId) {
+    return this._get(`greenway/analytics-2/first-line-registrations-activations/${partnerId}/`);
+  }
+
+  getCumulativeSgoDynamics(partnerId, firstPeriod, secondPeriod) {
+    return this._get(`greenway/analytics-2/cumulative-sgo-dynamics/${partnerId}/`, {
+      first_period: firstPeriod,
+      second_period: secondPeriod,
+    });
+  }
+
+  getDailySgoDynamics(partnerId, firstPeriod, secondPeriod) {
+    return this._get(`greenway/analytics-2/daily-sgo-dynamics/${partnerId}/`, {
+      first_period: firstPeriod,
+      second_period: secondPeriod,
+    });
+  }
+
+  getRegistrations(partnerId, firstPeriod, secondPeriod) {
+    return this._get(`greenway/analytics-2/registrations/${partnerId}/`, {
+      first_period: firstPeriod,
+      second_period: secondPeriod,
+    });
+  }
+
+  getActivations(partnerId, firstPeriod, secondPeriod) {
+    return this._get(`greenway/analytics-2/activations/${partnerId}/`, {
+      first_period: firstPeriod,
+      second_period: secondPeriod,
+    });
+  }
+
+  getCountriesCities(partnerId, period) {
+    return this._get(`greenway/analytics-2/countries-cities/${partnerId}/`, { period });
+  }
+}
+
+module.exports = { GreenwayClient };

@@ -118,6 +118,40 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   details TEXT
 );
 
+-- Учётные данные партнёра для личного кабинета Greenway (pyapi.greenwaystart.com).
+-- Токены хранятся зашифрованными (см. src/greenway/tokenCrypto.js) — здесь только шифротекст.
+CREATE TABLE IF NOT EXISTS greenway_accounts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  partner_id INTEGER NOT NULL UNIQUE,
+  gw_partner_id TEXT,
+  access_token_encrypted TEXT,
+  refresh_token_encrypted TEXT,
+  token_expires_at DATETIME,
+  last_synced_at DATETIME,
+  is_active BOOLEAN DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (partner_id) REFERENCES partners(id)
+);
+
+-- Ежедневный снимок ключевых бизнес-показателей партнёра из pyapi (main-view),
+-- т.к. сам личный кабинет сравнивает только 2 периода за раз — история нужна боту.
+CREATE TABLE IF NOT EXISTS greenway_snapshots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  partner_id INTEGER NOT NULL,
+  captured_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  qualification TEXT,
+  rank TEXT,
+  lo REAL,
+  lgo REAL,
+  sgo REAL,
+  first_line_total INTEGER,
+  first_line_active INTEGER,
+  clients_total INTEGER,
+  clients_with_orders INTEGER,
+  raw_json TEXT,
+  FOREIGN KEY (partner_id) REFERENCES partners(id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_clients_partner_id ON clients(partner_id);
 CREATE INDEX IF NOT EXISTS idx_clients_last_order_date ON clients(last_order_date);
 CREATE INDEX IF NOT EXISTS idx_sales_client_id ON sales(client_id);
@@ -127,5 +161,6 @@ CREATE INDEX IF NOT EXISTS idx_deadlines_status ON deadlines(status);
 CREATE INDEX IF NOT EXISTS idx_chains_partner_id ON chains(partner_id);
 CREATE INDEX IF NOT EXISTS idx_chains_client_id ON chains(client_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_scheduled_for ON notifications(scheduled_for);
+CREATE INDEX IF NOT EXISTS idx_greenway_snapshots_partner_id ON greenway_snapshots(partner_id, captured_at);
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
