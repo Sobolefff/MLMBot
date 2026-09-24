@@ -61,7 +61,12 @@ class GreenwayClient {
       } catch (err) {
         lastError = err;
         if (err.code === 'TOKEN_EXPIRED') throw err;
-        logger.error('Greenway API request failed, retrying', { path: pathForLogs, attempt, error: err.message });
+        logger.error('Greenway API request failed, retrying', {
+          path: pathForLogs,
+          attempt,
+          error: err.message,
+          cause: err.cause ? `${err.cause.code || ''} ${err.cause.message || err.cause}`.trim() : undefined,
+        });
         await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
       }
     }
