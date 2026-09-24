@@ -1,0 +1,67 @@
+# nginx.conf.example — пример конфигурации Nginx как reverse proxy перед
+# REST API Greenway Bot (сервис `app`, порт 3000) с поддержкой SSL
+# (Let's Encrypt / certbot).
+#
+# Как использовать:
+#   1. Скопируйте этот файл на сервер, например в /etc/nginx/sites-available/greenway-bot.conf
+#      и поправьте server_name (замените example.com на свой домен).
+#   2. Получите сертификат через certbot (см. инструкцию в README.md, раздел «Деплой»).
+#   3. Создайте симлинк в sites-enabled и перезапустите nginx:
+#        sudo ln -s /etc/nginx/sites-available/greenway-bot.conf /etc/nginx/sites-enabled/
+#        sudo nginx -t && sudo systemctl reload nginx
+#
+# Сервис `app` должен быть доступен на 127.0.0.1:3000 (если nginx на хосте,
+# а app — в docker-compose с проброшенным портом '3000:3000') либо
+# используйте имя сервиса `app:3000`, если сам nginx тоже запущен в той же
+# docker-сети (docker-compose).
+
+# Редирект с HTTP на HTTPS + ACME challenge для certbot (webroot-режим)
+server {
+    listen 80;
+    listen [::]:80;
+    server_name example.com;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name example.com;
+
+    # Пути к сертификатам Let's Encrypt (создаются certbot'ом)
+    ssl_certificate     /etc/letsencrypt/live/example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
+    # Рекомендуемые security-заголовки
+    add_header X-Frame-Options SAMEORIGIN always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy no-referrer-when-downgrade always;
+
+    client_max_body_size 5m;
+
+    location /health {
+        proxy_pass http://127.0.0.1:3000/health;
+        access_log off;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+    }
+}
