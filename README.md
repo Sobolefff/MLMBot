@@ -32,8 +32,8 @@ src/
   bot/          — Telegram-бот (telegraf.js): handlers, keyboards, API-клиент, worker очередей
   api/          — REST API: routes, services, middleware
   database/     — SQLite схема и инициализация
-  scheduler/    — cron-задачи (проверка цепочек)
-  parsers/      — парсер каталога Greenway (Playwright)
+  scheduler/    — cron-задачи (проверка цепочек, синк каталога)
+  greenway/     — интеграция с личным кабинетом Greenway (pyapi.greenwaystart.com): клиент API, шифрование токенов, синк каталога товаров
   utils/        — логирование, аудит
   config/       — конфигурация из .env
 docker/         — Dockerfile и docker-compose для продакшена
@@ -52,12 +52,37 @@ tests/
 - [x] Cron-планировщик цепочек — ежедневно проверяет `last_order_date` активных цепочек и ставит клиентские напоминания в очередь
 - [x] Rate limiting на /auth
 - [x] Audit log для действий партнёров
-- [ ] Парсер каталога Greenway — селекторы-заглушки, требуют уточнения после доступа к реальной разметке сайта / личного кабинета
-- [ ] Cron job для ежедневного обновления каталога
-- [ ] Security review (JWT/bcrypt hardening, CORS)
+- [x] Security review (helmet, CORS allowlist, JWT_SECRET проверка при старте, rate limiting расширен, SQL injection аудит пройден)
 - [x] Docker production deployment (SSL/Nginx пример конфига, healthcheck'и, backup-скрипт SQLite — см. раздел «Деплой» ниже)
+- [x] Каталог товаров Greenway — найден и подключён через `pyapi.greenwaystart.com` (не нужен HTML-скрейпинг), ежедневный cron синка — см. раздел «Интеграция с Greenway» ниже
+- [ ] Автоматическое подключение аккаунта партнёра (логин через pyapi) — эндпоинт логина ещё не подтверждён, пока только ручное подключение токена
 
 Полный и приоритизированный список — в `TODO.md`.
+
+## Интеграция с Greenway (pyapi.greenwaystart.com)
+
+Личный кабинет `greenwayglobal.com` — SPA поверх JSON API на отдельном домене `pyapi.greenwaystart.com`. Каталог товаров, история заказов, финансы и бизнес-аналитика партнёра (команда/квалификация/PRO-бонус) — всё через этот API, авторизация заголовком `Authorization: Bearer <accessToken>`.
+
+Эндпоинт логина ещё не подтверждён (см. `TODO.md`), поэтому пока используется временный мост — токен получают вручную через DevTools браузера и кладут в БД:
+
+```bash
+# 1. Сгенерировать ключ шифрования (один раз, в .env как GREENWAY_TOKEN_ENC_KEY)
+openssl rand -hex 32
+
+# 2. Получить accessToken вручную (DevTools → Console на странице greenwayglobal.com,
+#    пользователь уже залогинен):
+#    const token = document.cookie.match(/accessToken=([^;]+)/)[1];
+#    console.log(decodeURIComponent(token));
+
+# 3. Подключить токен к партнёру в БД бота (partner_id — id из таблицы partners,
+#    gw_partner_id — user.id из ответа auth/info/, НЕ видимый ID партнёра)
+GW_MANUAL_ACCESS_TOKEN=<токен> npm run gw:connect -- <partner_id> <gw_partner_id>
+
+# 4. Разовый синк каталога товаров (после подключения хотя бы одного аккаунта)
+npm run gw:sync-catalog
+```
+
+После этого ежедневный cron (`PARSER_CRON` в `.env`) сам обновляет каталог через `src/scheduler/catalogCron.js`, используя первый активный `greenway_accounts` как сервисный токен.
 
 ## Деплой
 

@@ -2,6 +2,7 @@ const { createApp } = require('./api/app');
 const config = require('./config');
 const logger = require('./utils/logger');
 const { startChainsCron } = require('./scheduler/chainsCron');
+const { startCatalogCron } = require('./scheduler/catalogCron');
 
 config.assertProductionSecrets();
 
@@ -12,3 +13,4 @@ app.listen(config.port, () => {
 });
 
 startChainsCron();
+startCatalogCron();

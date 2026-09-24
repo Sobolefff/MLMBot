@@ -10,6 +10,8 @@
     "worker": "node src/bot/worker.js",
     "dev": "node --watch src/index.js",
     "db:init": "node src/database/init.js",
+    "gw:connect": "node src/greenway/connectAccount.js",
+    "gw:sync-catalog": "node src/greenway/syncCatalogOnce.js",
     "test": "jest",
     "test:unit": "jest tests/unit",
     "test:integration": "jest tests/integration",
@@ -27,7 +29,6 @@
     "joi": "^17.13.3",
     "jsonwebtoken": "^9.0.2",
     "node-cron": "^4.6.0",
-    "playwright": "^1.47.2",
     "telegraf": "^4.16.3",
     "winston": "^3.14.2"
   },

@@ -7,8 +7,8 @@ const MAX_RETRIES = 2;
  * Thin, throttled wrapper over the JSON API that greenwayglobal.com's SPA
  * calls (pyapi.greenwaystart.com). All endpoints below were confirmed
  * manually via DevTools on 2026-09-24 — see memory `reference-greenway-pyapi`
- * for the recon notes. This does NOT cover the product catalog (price/PV) —
- * that's a separate, still-unconfirmed data source (see src/parsers/).
+ * for the recon notes (incl. the product catalog, order history, finances
+ * and statement endpoints found in the second recon pass).
  *
  * One instance per partner token, since each request needs that partner's
  * bearer token and Greenway may rate-limit/flag per-account polling.
@@ -29,12 +29,20 @@ class GreenwayClient {
     }
   }
 
-  async _get(path, params = {}) {
-    await this._throttle();
+  _buildUrl(path, params = {}) {
     const url = new URL(path, this.baseUrl);
     for (const [key, value] of Object.entries(params)) {
       if (value !== undefined && value !== null) url.searchParams.set(key, value);
     }
+    return url;
+  }
+
+  async _get(path, params = {}) {
+    return this._request(this._buildUrl(path, params), path);
+  }
+
+  async _request(url, pathForLogs = url.pathname) {
+    await this._throttle();
 
     let lastError;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -47,13 +55,13 @@ class GreenwayClient {
           throw Object.assign(new Error('Greenway access token expired or invalid'), { code: 'TOKEN_EXPIRED' });
         }
         if (!res.ok) {
-          throw new Error(`Greenway API ${path} returned ${res.status}`);
+          throw new Error(`Greenway API ${pathForLogs} returned ${res.status}`);
         }
         return await res.json();
       } catch (err) {
         lastError = err;
         if (err.code === 'TOKEN_EXPIRED') throw err;
-        logger.error('Greenway API request failed, retrying', { path, attempt, error: err.message });
+        logger.error('Greenway API request failed, retrying', { path: pathForLogs, attempt, error: err.message });
         await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
       }
     }
@@ -131,6 +139,67 @@ class GreenwayClient {
 
   getCountriesCities(partnerId, period) {
     return this._get(`greenway/analytics-2/countries-cities/${partnerId}/`, { period });
+  }
+
+  // --- Каталог товаров (для PV-Подборщика) ---
+  /** Весь каталог одним запросом (без пагинации) — ~634 товара на момент разведки. */
+  getShopProducts() {
+    return this._get('greenway/shop/product/quick/');
+  }
+
+  /** Структура каталога: brands[], sections[] (категории), фильтры. */
+  getShopMeta({ withStatic = false } = {}) {
+    return this._get('greenway/shop/', withStatic ? { withStatic: 1 } : {});
+  }
+
+  // --- Мои заказы ---
+  getOrderList(page = 1) {
+    return this._get('greenway/office/order/list/', { page });
+  }
+
+  getOrderStatuses(orderIds = []) {
+    const url = this._buildUrl('greenway/office/statement/user-orders-statuses/');
+    for (const id of orderIds) url.searchParams.append('orderIds[]', id);
+    return this._request(url, 'greenway/office/statement/user-orders-statuses/');
+  }
+
+  // --- Мои финансы ---
+  getAccountList() {
+    return this._get('greenway/office/account/list/');
+  }
+
+  getPayoutList() {
+    return this._get('greenway/office/payout/list/');
+  }
+
+  getPayoutCompanyList() {
+    return this._get('greenway/office/payout/company/list/');
+  }
+
+  // --- Стейтмент (расчёт вознаграждения) ---
+  getStatement(periodId) {
+    return this._get('greenway/office/statement/', { periodId });
+  }
+
+  getStatementCountriesStats(periodId) {
+    return this._get('greenway/office/statement/user-countries-statistics/', { periodId });
+  }
+
+  getStatementTeamRevenue(periodId) {
+    return this._get('greenway/office/statement/team-revenue/', { periodId });
+  }
+
+  // --- Dashboard / геймификация ---
+  getDashboard() {
+    return this._get('greenway/office/dashboard/');
+  }
+
+  getDashboardProGrade() {
+    return this._get('greenway/office/dashboard/pro-grade/');
+  }
+
+  getDashboardTooFastTooFurious() {
+    return this._get('greenway/office/dashboard/too-fast-too-furious/');
   }
 }
 

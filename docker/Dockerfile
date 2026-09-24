@@ -11,8 +11,6 @@ RUN npm install --omit=dev --no-audit --no-fund
 
 COPY . .
 
-RUN npx playwright install --with-deps chromium
-
 ENV NODE_ENV=production
 EXPOSE 3000
 
