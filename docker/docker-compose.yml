@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    volumes:
+      - app-data:/app/data
+    depends_on:
+      - redis
+    ports:
+      - '3000:3000'
+
+  bot:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    command: ['node', 'src/bot/index.js']
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    volumes:
+      - app-data:/app/data
+    depends_on:
+      - app
+      - redis
+
+  worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    command: ['node', 'src/bot/worker.js']
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    volumes:
+      - app-data:/app/data
+    depends_on:
+      - app
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+
+volumes:
+  app-data:
+  redis-data:
