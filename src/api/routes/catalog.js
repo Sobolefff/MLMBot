@@ -4,6 +4,7 @@ const { requireAuth } = require('../middleware/auth');
 const { logAudit } = require('../../utils/audit');
 const { syncFromPdfBuffer } = require('../../catalog/pdfCatalogSync');
 const logger = require('../../utils/logger');
+const config = require('../../config');
 
 const router = express.Router();
 
@@ -21,7 +22,7 @@ router.post(
   '/import-pdf',
   importLimiter,
   requireAuth,
-  express.raw({ type: 'application/pdf', limit: '25mb' }),
+  express.raw({ type: 'application/pdf', limit: `${config.maxPdfUploadMb}mb` }),
   async (req, res) => {
     if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
       return res.status(400).json({ error: 'Ожидался файл PDF в теле запроса (Content-Type: application/pdf)' });

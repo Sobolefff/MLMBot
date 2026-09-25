@@ -15,7 +15,10 @@ if (!config.botToken) {
   process.exit(1);
 }
 
-const bot = new Telegraf(config.botToken);
+const bot = new Telegraf(config.botToken, { telegram: { apiRoot: config.telegramApiRoot } });
+if (config.telegramApiRoot !== 'https://api.telegram.org') {
+  logger.info(`Using self-hosted Telegram Bot API server at ${config.telegramApiRoot}`);
+}
 
 bot.use(session());
 

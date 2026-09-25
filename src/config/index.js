@@ -31,6 +31,16 @@ function assertProductionSecrets() {
 module.exports = {
   botToken: process.env.BOT_TOKEN || '',
   port: parseInt(process.env.PORT, 10) || 3000,
+  // Cloud api.telegram.org hard-caps file downloads (getFile) at 20 MB
+  // regardless of anything we configure. Pointing this at a self-hosted
+  // telegram-bot-api server (docker/docker-compose.yml, service
+  // `telegram-bot-api`) raises that to ~2000 MB - see README "Self-hosted
+  // Bot API сервер". Leave as the default when not running one.
+  telegramApiRoot: process.env.TELEGRAM_API_ROOT || 'https://api.telegram.org',
+  // Our own ceiling on top of whatever Telegram allows, so a self-hosted
+  // server doesn't invite someone to hand the bot a multi-GB file that would
+  // just blow up Node's memory while parsing it.
+  maxPdfUploadMb: parseInt(process.env.MAX_PDF_UPLOAD_MB, 10) || 150,
   nodeEnv,
   sqlitePath: process.env.SQLITE_PATH || './data/greenway.db',
   redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',

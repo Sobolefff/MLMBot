@@ -34,6 +34,28 @@ services:
     depends_on:
       - app
       - redis
+      - telegram-bot-api
+
+  # Опционально: self-hosted Bot API сервер. Снимает лимит облачного
+  # api.telegram.org в 20 МБ на скачивание файлов ботом (getFile) — без него
+  # партнёры не смогут прислать боту PDF-каталог тяжелее 20 МБ (см. README
+  # "Self-hosted Bot API сервер"). Требует TELEGRAM_API_ID/TELEGRAM_API_HASH
+  # в .env (https://my.telegram.org/apps) и TELEGRAM_API_ROOT=http://telegram-bot-api:8081.
+  # Если не нужен — можно убрать этот сервис и depends_on выше, оставив
+  # TELEGRAM_API_ROOT по умолчанию (https://api.telegram.org).
+  telegram-bot-api:
+    image: aiogram/telegram-bot-api:latest
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    volumes:
+      - telegram-bot-api-data:/var/lib/telegram-bot-api
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:8081/']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   worker:
     build:
@@ -64,3 +86,4 @@ services:
 volumes:
   app-data:
   redis-data:
+  telegram-bot-api-data:

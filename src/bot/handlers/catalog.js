@@ -1,9 +1,14 @@
 const apiClient = require('../apiClient');
+const config = require('../../config');
 
-// The cloud Telegram Bot API refuses to hand bots files above this size via
-// getFile/getFileLink regardless of our own limits - fail fast with a clear
-// message instead of a confusing download error.
-const MAX_TELEGRAM_FILE_BYTES = 20 * 1024 * 1024;
+// The cloud Telegram Bot API (api.telegram.org) refuses to hand bots files
+// above this size via getFile/getFileLink no matter what we configure - it's
+// a hard wall on Telegram's side. A self-hosted Bot API server (see README
+// "Self-hosted Bot API сервер") removes it, and MAX_PDF_UPLOAD_MB below
+// becomes the effective limit instead.
+const CLOUD_API_FILE_LIMIT_BYTES = 20 * 1024 * 1024;
+const USING_SELF_HOSTED_API = config.telegramApiRoot !== 'https://api.telegram.org';
+const MAX_UPLOAD_BYTES = config.maxPdfUploadMb * 1024 * 1024;
 
 function isPdfDocument(document) {
   if (!document) return false;
@@ -21,11 +26,17 @@ function registerCatalogHandler(bot) {
       return;
     }
 
-    if (document.file_size && document.file_size > MAX_TELEGRAM_FILE_BYTES) {
+    if (!USING_SELF_HOSTED_API && document.file_size && document.file_size > CLOUD_API_FILE_LIMIT_BYTES) {
       await ctx.reply(
-        '⚠️ Файл больше 20 МБ — Telegram не отдаёт боту такие файлы напрямую. ' +
-          'Пришлите более лёгкую версию каталога (например, без картинок) или уточните у поддержки.'
+        '⚠️ Файл больше 20 МБ — облачный Telegram Bot API не отдаёт боту такие файлы напрямую. ' +
+          'Пришлите более лёгкую версию каталога (например, без картинок) либо попросите администратора ' +
+          'бота подключить self-hosted Bot API сервер (см. README) — тогда лимит снимается.'
       );
+      return;
+    }
+
+    if (document.file_size && document.file_size > MAX_UPLOAD_BYTES) {
+      await ctx.reply(`⚠️ Файл больше ${config.maxPdfUploadMb} МБ — это больше, чем бот готов принять за раз.`);
       return;
     }
 
@@ -53,4 +64,4 @@ function registerCatalogHandler(bot) {
   });
 }
 
-module.exports = { registerCatalogHandler, isPdfDocument, MAX_TELEGRAM_FILE_BYTES };
+module.exports = { registerCatalogHandler, isPdfDocument, CLOUD_API_FILE_LIMIT_BYTES, MAX_UPLOAD_BYTES };
