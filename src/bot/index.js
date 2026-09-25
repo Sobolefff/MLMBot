@@ -3,7 +3,6 @@ const config = require('../config');
 const logger = require('../utils/logger');
 const { registerStartHandler } = require('./handlers/start');
 const { registerPvCalcHandler } = require('./handlers/pvCalc');
-const { registerChainsHandler } = require('./handlers/chains');
 const { registerDeadlinesHandler } = require('./handlers/deadlines');
 const { registerSettingsHandler } = require('./handlers/settings');
 const { registerCatalogHandler } = require('./handlers/catalog');
@@ -24,7 +23,15 @@ bot.use(session());
 
 registerStartHandler(bot);
 registerPvCalcHandler(bot);
-registerChainsHandler(bot);
+// PAUSED 2026-09-25 by user request: "Мои цепочки" relies on
+// clients.last_order_date, which only gets populated by a personal-cabinet
+// order sync that doesn't exist yet (pyapi integration is itself paused -
+// see src/index.js). Without real order data the feature can't do anything
+// useful, so it's hidden from the bot rather than shown half-working.
+// src/bot/handlers/chains.js, chainsService.js and the /chains API routes
+// are left in place, ready to re-enable once order sync exists.
+// const { registerChainsHandler } = require('./handlers/chains');
+// registerChainsHandler(bot);
 registerDeadlinesHandler(bot);
 registerSettingsHandler(bot);
 registerCatalogHandler(bot);
@@ -34,7 +41,6 @@ bot.hears('❓ Помощь', (ctx) =>
     'Доступные команды:\n' +
       '/start — регистрация\n' +
       '📊 PV-Подборщик — подбор товаров под целевой PV/сумму\n' +
-      '🔔 Мои цепочки — статус клиентов\n' +
       '⏰ Сроки — активные дедлайны (там же кнопка «Изменить остаток PV»)\n' +
       '/newdeadline — создать новый срок\n' +
       '📎 Пришлите PDF-каталог Greenway файлом — бот обновит базу товаров'

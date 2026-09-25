@@ -1,8 +1,8 @@
 const { Markup } = require('telegraf');
 
 const mainMenuKeyboard = Markup.keyboard([
-  ['📊 PV-Подборщик', '🔔 Мои цепочки'],
-  ['⏰ Сроки', '⚙️ Настройки'],
+  ['📊 PV-Подборщик', '⏰ Сроки'],
+  ['⚙️ Настройки'],
   ['❓ Помощь'],
 ]).resize();
 

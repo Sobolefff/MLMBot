@@ -33,7 +33,6 @@ const config = require('../../src/config');
 
 const { registerStartHandler } = require('../../src/bot/handlers/start');
 const { registerPvCalcHandler } = require('../../src/bot/handlers/pvCalc');
-const { registerChainsHandler } = require('../../src/bot/handlers/chains');
 const { registerDeadlinesHandler } = require('../../src/bot/handlers/deadlines');
 const { registerSettingsHandler } = require('../../src/bot/handlers/settings');
 const { closeQueue } = require('../../src/api/services/notificationsService');
@@ -52,7 +51,7 @@ function buildBot() {
   bot.use(session());
   registerStartHandler(bot);
   registerPvCalcHandler(bot);
-  registerChainsHandler(bot);
+  // registerChainsHandler(bot); // PAUSED - see src/bot/index.js
   registerDeadlinesHandler(bot);
   registerSettingsHandler(bot);
   bot.catch((err) => {
@@ -233,7 +232,10 @@ describe('E2E: PV-Подборщик', () => {
   });
 });
 
-describe('E2E: цепочки — включение/выключение и удаление клиента', () => {
+// PAUSED 2026-09-25 along with the handler itself (see src/bot/index.js) -
+// "Мои цепочки" needs order-sync data (clients.last_order_date) that doesn't
+// exist yet. Kept (skipped, not deleted) so it's ready once that data exists.
+describe.skip('E2E: цепочки — включение/выключение и удаление клиента', () => {
   const bot = buildBot();
   const chatId = 5003;
   const userId = 9003;
@@ -380,7 +382,7 @@ describe('E2E: сессия переживает потерю (перезапу�
     const botAfter = buildBot();
     resetOutbox();
 
-    await botAfter.handleUpdate(textUpdate(chatId, userId, '🔔 Мои цепочки'));
+    await botAfter.handleUpdate(textUpdate(chatId, userId, '⏰ Сроки'));
     expect(lastReplyText()).not.toMatch(/сначала завершите регистрацию/i);
 
     resetOutbox();
