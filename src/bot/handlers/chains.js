@@ -1,12 +1,11 @@
 const { Markup } = require('telegraf');
 const apiClient = require('../apiClient');
+const { ensureSession } = require('../session');
 
-function requireSession(ctx) {
-  if (!ctx.session?.token) {
-    ctx.reply('Сначала завершите регистрацию через /start.');
-    return false;
-  }
-  return true;
+async function requireSession(ctx) {
+  if (await ensureSession(ctx)) return true;
+  await ctx.reply('Сначала завершите регистрацию через /start.');
+  return false;
 }
 
 function daysSince(dateStr) {
@@ -48,7 +47,7 @@ async function renderClientsList(ctx) {
 
 function registerChainsHandler(bot) {
   bot.hears('🔔 Мои цепочки', async (ctx) => {
-    if (!requireSession(ctx)) return;
+    if (!(await requireSession(ctx))) return;
     try {
       await renderClientsList(ctx);
     } catch (err) {
@@ -57,7 +56,7 @@ function registerChainsHandler(bot) {
   });
 
   bot.action(/chain_toggle_(\d+)/, async (ctx) => {
-    if (!requireSession(ctx)) return ctx.answerCbQuery();
+    if (!(await requireSession(ctx))) return ctx.answerCbQuery();
     const clientId = Number(ctx.match[1]);
     await ctx.answerCbQuery();
     try {
@@ -80,7 +79,7 @@ function registerChainsHandler(bot) {
   });
 
   bot.action(/client_delete_(\d+)/, async (ctx) => {
-    if (!requireSession(ctx)) return ctx.answerCbQuery();
+    if (!(await requireSession(ctx))) return ctx.answerCbQuery();
     const clientId = Number(ctx.match[1]);
     await ctx.answerCbQuery();
     try {

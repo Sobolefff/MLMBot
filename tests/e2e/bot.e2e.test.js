@@ -36,6 +36,7 @@ const { registerPvCalcHandler } = require('../../src/bot/handlers/pvCalc');
 const { registerChainsHandler } = require('../../src/bot/handlers/chains');
 const { registerDeadlinesHandler } = require('../../src/bot/handlers/deadlines');
 const { registerSettingsHandler } = require('../../src/bot/handlers/settings');
+const { closeQueue } = require('../../src/api/services/notificationsService');
 
 let server;
 let sentMessages;
@@ -151,6 +152,7 @@ beforeAll(() => {
 afterAll(async () => {
   jest.restoreAllMocks();
   await new Promise((resolve) => server.close(resolve));
+  await closeQueue();
   getDb().close();
   fs.rmSync(process.env.SQLITE_PATH, { force: true });
   fs.rmSync(`${process.env.SQLITE_PATH}-wal`, { force: true });
@@ -357,5 +359,109 @@ describe('E2E: настройки — добавление клиента и у�
     resetOutbox();
     await bot.handleUpdate(textUpdate(chatId, userId, '⚙️ Настройки'));
     expect(lastReplyText()).toMatch(/сначала завершите регистрацию/i);
+  });
+});
+
+describe('E2E: сессия переживает потерю (перезапуск бота)', () => {
+  const chatId = 5004;
+  const userId = 9004;
+
+  test('уже зарегистрированный партнёр не должен заново вводить согласие/имя/телефон', async () => {
+    // Register once, on a "before restart" bot instance.
+    const botBefore = buildBot();
+    await botBefore.handleUpdate(textUpdate(chatId, userId, '/start'));
+    await botBefore.handleUpdate(callbackUpdate(chatId, userId, 'consent_accept'));
+    await botBefore.handleUpdate(textUpdate(chatId, userId, 'Сессия Тестова'));
+    await botBefore.handleUpdate(textUpdate(chatId, userId, '+79990004004'));
+    expect(lastReplyText()).toMatch(/регистрация завершена/i);
+
+    // A restart wipes the in-memory session() store - a brand new Telegraf
+    // instance with its own fresh session() simulates that faithfully.
+    const botAfter = buildBot();
+    resetOutbox();
+
+    await botAfter.handleUpdate(textUpdate(chatId, userId, '🔔 Мои цепочки'));
+    expect(lastReplyText()).not.toMatch(/сначала завершите регистрацию/i);
+
+    resetOutbox();
+    await botAfter.handleUpdate(textUpdate(chatId, userId, '/start'));
+    expect(lastReplyText()).toMatch(/с возвращением/i);
+  });
+
+  test('телеграм-пользователь, который никогда не регистрировался, всё ещё должен пройти /start', async () => {
+    const bot = buildBot();
+    await bot.handleUpdate(textUpdate(6004, 9999004, '⏰ Сроки'));
+    expect(lastReplyText()).toMatch(/сначала завершите регистрацию/i);
+  });
+});
+
+describe('E2E: /newdeadline и изменение остатка PV', () => {
+  const bot = buildBot();
+  const chatId = 5005;
+  const userId = 9005;
+
+  beforeAll(async () => {
+    await bot.handleUpdate(textUpdate(chatId, userId, '/start'));
+    await bot.handleUpdate(callbackUpdate(chatId, userId, 'consent_accept'));
+    await bot.handleUpdate(textUpdate(chatId, userId, 'Пётр Дедлайнов'));
+    await bot.handleUpdate(textUpdate(chatId, userId, '+79990005005'));
+    resetOutbox();
+  });
+
+  test('/newdeadline создаёт срок по шагам: название → PV → дата', async () => {
+    await bot.handleUpdate(textUpdate(chatId, userId, '/newdeadline'));
+    expect(lastReplyText()).toMatch(/название цели/i);
+
+    await bot.handleUpdate(textUpdate(chatId, userId, 'Квалификация S3'));
+    expect(lastReplyText()).toMatch(/сколько pv/i);
+
+    await bot.handleUpdate(textUpdate(chatId, userId, '150'));
+    expect(lastReplyText()).toMatch(/до какой даты/i);
+
+    await bot.handleUpdate(textUpdate(chatId, userId, '31.12.2099 18:00'));
+    expect(lastReplyText()).toMatch(/срок создан/i);
+    expect(lastReplyText()).toMatch(/150 pv/i);
+
+    const db = getDb();
+    const partner = db.prepare('SELECT id FROM partners WHERE telegram_id = ?').get(userId);
+    const deadline = db
+      .prepare("SELECT * FROM deadlines WHERE partner_id = ? AND title = 'Квалификация S3'")
+      .get(partner.id);
+    expect(deadline).toBeDefined();
+    expect(deadline.target_pv).toBe(150);
+  });
+
+  test('отклоняет нераспознанную дату и остаётся на том же шаге', async () => {
+    await bot.handleUpdate(textUpdate(chatId, userId, '/newdeadline'));
+    await bot.handleUpdate(textUpdate(chatId, userId, '-'));
+    await bot.handleUpdate(textUpdate(chatId, userId, '80'));
+    await bot.handleUpdate(textUpdate(chatId, userId, 'завтра вечером'));
+    expect(lastReplyText()).toMatch(/не удалось распознать дату/i);
+
+    await bot.handleUpdate(textUpdate(chatId, userId, '01.01.2099'));
+    expect(lastReplyText()).toMatch(/срок создан/i);
+  });
+
+  test('«⏰ Сроки» показывает остаток PV и кнопку изменения; кнопка меняет остаток', async () => {
+    resetOutbox();
+    await bot.handleUpdate(textUpdate(chatId, userId, '⏰ Сроки'));
+    const texts = allReplyTexts();
+    expect(texts.some((t) => /Квалификация S3/.test(t) && /осталось 150 PV/.test(t))).toBe(true);
+
+    const db = getDb();
+    const partner = db.prepare('SELECT id FROM partners WHERE telegram_id = ?').get(userId);
+    const deadline = db
+      .prepare("SELECT * FROM deadlines WHERE partner_id = ? AND title = 'Квалификация S3'")
+      .get(partner.id);
+
+    resetOutbox();
+    await bot.handleUpdate(callbackUpdate(chatId, userId, `deadline_edit_${deadline.id}`));
+    expect(lastReplyText()).toMatch(/сколько pv осталось набрать теперь/i);
+
+    await bot.handleUpdate(textUpdate(chatId, userId, '40'));
+    expect(lastReplyText()).toMatch(/осталось 40 pv/i);
+
+    const updated = db.prepare('SELECT * FROM deadlines WHERE id = ?').get(deadline.id);
+    expect(updated.current_pv).toBe(110); // 150 target - 40 remaining
   });
 });

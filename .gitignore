@@ -2,6 +2,7 @@ node_modules/
 data/
 *.db
 *.db-journal
+*.rdb
 .env
 npm-debug.log*
 coverage/

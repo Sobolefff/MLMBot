@@ -67,4 +67,13 @@ async function scheduleDeadlineNotifications(deadline) {
   return scheduledCount;
 }
 
-module.exports = { scheduleDeadlineNotifications, OFFSETS_MS };
+// Exposed for tests: lets them close the Bull/ioredis connection in afterAll
+// so Jest can exit promptly instead of waiting out its open-handle timeout.
+async function closeQueue() {
+  if (queue) {
+    await queue.close();
+    queue = null;
+  }
+}
+
+module.exports = { scheduleDeadlineNotifications, closeQueue, OFFSETS_MS };

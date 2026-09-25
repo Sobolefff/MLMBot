@@ -1,8 +1,15 @@
 const { mainMenuKeyboard, consentKeyboard } = require('../keyboards/mainMenu');
 const apiClient = require('../apiClient');
+const { ensureSession } = require('../session');
 
 function registerStartHandler(bot) {
   bot.start(async (ctx) => {
+    // Already a partner (their session just got wiped by a bot restart) -
+    // skip straight back to the menu instead of re-running consent/name/phone.
+    if (await ensureSession(ctx)) {
+      await ctx.reply('С возвращением! Выберите раздел в меню ниже.', mainMenuKeyboard);
+      return;
+    }
     ctx.session ??= {};
     ctx.session.registration = { step: 'consent' };
     await ctx.reply(

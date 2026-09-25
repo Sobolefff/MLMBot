@@ -1,5 +1,6 @@
 const apiClient = require('../apiClient');
 const { settingsKeyboard, deleteConfirmKeyboard } = require('../keyboards/settingsMenu');
+const { ensureSession } = require('../session');
 
 function profileText(partner) {
   return (
@@ -12,17 +13,15 @@ function profileText(partner) {
   );
 }
 
-function requireSession(ctx) {
-  if (!ctx.session?.token) {
-    ctx.reply('Сначала завершите регистрацию через /start.');
-    return false;
-  }
-  return true;
+async function requireSession(ctx) {
+  if (await ensureSession(ctx)) return true;
+  await ctx.reply('Сначала завершите регистрацию через /start.');
+  return false;
 }
 
 function registerSettingsHandler(bot) {
   bot.hears('⚙️ Настройки', async (ctx) => {
-    if (!requireSession(ctx)) return;
+    if (!(await requireSession(ctx))) return;
     try {
       const partner = await apiClient.request('/partners/me', { token: ctx.session.token });
       await ctx.reply(profileText(partner), settingsKeyboard(partner));
@@ -32,7 +31,7 @@ function registerSettingsHandler(bot) {
   });
 
   bot.action('settings_toggle_notifications', async (ctx) => {
-    if (!requireSession(ctx)) return ctx.answerCbQuery();
+    if (!(await requireSession(ctx))) return ctx.answerCbQuery();
     await ctx.answerCbQuery();
     try {
       const partner = await apiClient.request('/partners/me', { token: ctx.session.token });
@@ -48,7 +47,7 @@ function registerSettingsHandler(bot) {
   });
 
   bot.action('settings_toggle_chains', async (ctx) => {
-    if (!requireSession(ctx)) return ctx.answerCbQuery();
+    if (!(await requireSession(ctx))) return ctx.answerCbQuery();
     await ctx.answerCbQuery();
     try {
       const partner = await apiClient.request('/partners/me', { token: ctx.session.token });
@@ -64,14 +63,14 @@ function registerSettingsHandler(bot) {
   });
 
   bot.action('settings_add_client', async (ctx) => {
-    if (!requireSession(ctx)) return ctx.answerCbQuery();
+    if (!(await requireSession(ctx))) return ctx.answerCbQuery();
     await ctx.answerCbQuery();
     ctx.session.addClient = { step: 'name' };
     await ctx.reply('Введите имя клиента:');
   });
 
   bot.action('settings_delete_data', async (ctx) => {
-    if (!requireSession(ctx)) return ctx.answerCbQuery();
+    if (!(await requireSession(ctx))) return ctx.answerCbQuery();
     await ctx.answerCbQuery();
     await ctx.reply(
       '⚠️ Это действие безвозвратно удалит все ваши данные и данные ваших клиентов (ФЗ-152). Продолжить?',
@@ -85,7 +84,7 @@ function registerSettingsHandler(bot) {
   });
 
   bot.action('settings_delete_data_confirm', async (ctx) => {
-    if (!requireSession(ctx)) return ctx.answerCbQuery();
+    if (!(await requireSession(ctx))) return ctx.answerCbQuery();
     await ctx.answerCbQuery();
     try {
       const partner = await apiClient.request('/partners/me', { token: ctx.session.token });

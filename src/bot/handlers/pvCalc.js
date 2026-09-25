@@ -1,4 +1,5 @@
 const apiClient = require('../apiClient');
+const { ensureSession } = require('../session');
 
 function formatCombo(combo, index) {
   const lines = combo.items.map((item) => {
@@ -13,7 +14,10 @@ function formatCombo(combo, index) {
 
 function registerPvCalcHandler(bot) {
   bot.hears('📊 PV-Подборщик', async (ctx) => {
-    ctx.session ??= {};
+    if (!(await ensureSession(ctx))) {
+      await ctx.reply('Сначала завершите регистрацию через /start.');
+      return;
+    }
     ctx.session.pvCalc = { step: 'awaiting_target' };
     await ctx.reply('Какую сумму (в ₽) или PV вы хотите собрать? Например: "5000 RUB" или "150 PV"');
   });

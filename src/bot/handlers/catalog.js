@@ -1,6 +1,7 @@
 const fs = require('fs/promises');
 const apiClient = require('../apiClient');
 const config = require('../../config');
+const { ensureSession } = require('../session');
 
 // The cloud Telegram Bot API (api.telegram.org) refuses to hand bots files
 // above this size via getFile no matter what we configure - a hard wall on
@@ -41,7 +42,7 @@ function registerCatalogHandler(bot) {
     const document = ctx.message.document;
     if (!isPdfDocument(document)) return next();
 
-    if (!ctx.session?.token) {
+    if (!(await ensureSession(ctx))) {
       await ctx.reply('Сначала завершите регистрацию через /start, затем пришлите PDF-каталог ещё раз.');
       return;
     }
