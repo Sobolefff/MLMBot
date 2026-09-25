@@ -64,6 +64,25 @@ describe('pvCalc.search by target_pv', () => {
     const { results } = search([], { target_pv: 50 });
     expect(results).toEqual([]);
   });
+
+  test('does not crash on fractional PV (e.g. products imported from the PDF catalog)', () => {
+    const fractionalProducts = [
+      { id: 101, name: 'Файбер', price: 440, pv: 3.2, category: 'home', is_available: 1 },
+      { id: 102, name: 'БАД Кардио', price: 2470, pv: 16.3, category: 'health', is_available: 1 },
+      { id: 103, name: 'Чайный напиток', price: 550, pv: 3.2, category: 'tea', is_available: 1 },
+    ];
+    const { results } = search(fractionalProducts, { target_pv: 30, max_items: 10 });
+    expect(results.length).toBeGreaterThan(0);
+    for (const r of results) {
+      expect(r.total_pv).toBeGreaterThanOrEqual(30);
+    }
+  });
+
+  test('reports the true (unrounded) total PV, not the rounded value used for indexing', () => {
+    const fractionalProducts = [{ id: 201, name: 'Файбер', price: 100, pv: 3.2, category: 'home', is_available: 1 }];
+    const { results } = search(fractionalProducts, { target_pv: 6, max_items: 10 });
+    expect(results[0].total_pv).toBeCloseTo(6.4, 5); // 2 x 3.2 (indexing rounds 3.2 -> 3, so 2 picks already hit target 6)
+  });
 });
 
 describe('pvCalc.search by target_price', () => {

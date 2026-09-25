@@ -24,7 +24,13 @@ function buildDp(products, pvMax, maxItems) {
       }
       for (let i = 0; i < products.length; i++) {
         const item = products[i];
-        const prevPv = pv - item.pv;
+        // Products carry fractional PV (e.g. 3.2 from the PDF catalog import -
+        // pyapi's catalog happened to always be whole numbers, so this went
+        // unnoticed until then). The DP table is indexed by PV, so a
+        // fractional value here would look up a non-existent array slot and
+        // read `.price` off `undefined`. Round only for indexing - the real
+        // (unrounded) PV is still what gets reported back in reconstruct().
+        const prevPv = pv - Math.round(item.pv);
         if (prevPv < 0) continue;
         const candidatePrice = dp[k - 1][prevPv].price + item.price;
         if (candidatePrice < dp[k][pv].price) {
@@ -105,6 +111,9 @@ function searchByTargetPv(allProducts, { targetPv, maxItems = DEFAULT_MAX_ITEMS,
   if (!targetPv || targetPv <= 0) {
     throw new Error('targetPv must be a positive number');
   }
+  // The DP table below is indexed by PV, so it needs an integer target
+  // (a fractional pvMax would make `new Array(pvMax + 1)` throw).
+  targetPv = Math.round(targetPv);
   const products = allProducts.filter(
     (p) => p.is_available !== 0 && !excludedCategories.includes(p.category)
   );
