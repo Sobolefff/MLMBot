@@ -1,9 +1,10 @@
 const apiClient = require('../apiClient');
 
 function formatCombo(combo, index) {
-  const lines = combo.items.map(
-    (item) => `  • ${item.name} — ${item.quantity} × ${item.price}₽ (${item.pv} PV)`
-  );
+  const lines = combo.items.map((item) => {
+    const line = `  • ${item.name} — ${item.quantity} × ${item.price}₽ (${item.pv} PV)`;
+    return item.product_url ? `${line}\n    ${item.product_url}` : line;
+  });
   return (
     `Вариант ${index + 1}️⃣ | Сумма: ${combo.total_price}₽ | PV: ${combo.total_pv}\n` +
     lines.join('\n')
@@ -49,4 +50,4 @@ function registerPvCalcHandler(bot) {
   });
 }
 
-module.exports = { registerPvCalcHandler };
+module.exports = { registerPvCalcHandler, formatCombo };

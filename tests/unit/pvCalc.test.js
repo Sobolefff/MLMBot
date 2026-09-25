@@ -83,6 +83,19 @@ describe('pvCalc.search by target_pv', () => {
     const { results } = search(fractionalProducts, { target_pv: 6, max_items: 10 });
     expect(results[0].total_pv).toBeCloseTo(6.4, 5); // 2 x 3.2 (indexing rounds 3.2 -> 3, so 2 picks already hit target 6)
   });
+
+  test('carries product_url through from the product row when present (PDF catalog import)', () => {
+    const withUrl = [
+      { id: 301, name: 'Файбер', price: 440, pv: 30, category: 'home', is_available: 1, product_url: 'https://greenwayglobal.com/shop/brands/fiber/06006' },
+    ];
+    const { results } = search(withUrl, { target_pv: 30, max_items: 10 });
+    expect(results[0].items[0].product_url).toBe('https://greenwayglobal.com/shop/brands/fiber/06006');
+  });
+
+  test('reports product_url as null when absent (pyapi catalog)', () => {
+    const { results } = search(products, { target_pv: 24, max_items: 10 });
+    expect(results[0].items[0].product_url).toBeNull();
+  });
 });
 
 describe('pvCalc.search by target_price', () => {
@@ -96,5 +109,13 @@ describe('pvCalc.search by target_price', () => {
 
   test('throws on non-positive target_price', () => {
     expect(() => search(products, { target_price: -5 })).toThrow();
+  });
+
+  test('carries product_url through for the target_price search path too', () => {
+    const withUrl = [
+      { id: 301, name: 'Файбер', price: 440, pv: 3.2, category: 'home', is_available: 1, product_url: 'https://greenwayglobal.com/shop/brands/fiber/06006' },
+    ];
+    const { results } = search(withUrl, { target_price: 1000, max_items: 10 });
+    expect(results[0].items[0].product_url).toBe('https://greenwayglobal.com/shop/brands/fiber/06006');
   });
 });

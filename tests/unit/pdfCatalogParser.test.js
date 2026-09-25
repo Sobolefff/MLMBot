@@ -1,4 +1,9 @@
-const { classifyFontRole, buildRecordsFromItems, normalizeRecords } = require('../../src/catalog/pdfCatalogParser');
+const {
+  classifyFontRole,
+  buildRecordsFromItems,
+  matchProductLinks,
+  normalizeRecords,
+} = require('../../src/catalog/pdfCatalogParser');
 
 const PAGE_WIDTH = 420;
 
@@ -134,12 +139,59 @@ describe('buildRecordsFromItems', () => {
   });
 });
 
+describe('matchProductLinks', () => {
+  const records = [{ name: 'A' }, { name: 'B' }];
+
+  test('assigns each link to the topmost card whose name line is at/above the link (within tolerance)', () => {
+    const positions = [
+      { side: 'left', topY: 500 },
+      { side: 'left', topY: 250 },
+    ];
+    const links = [
+      { url: 'https://example.com/a', rect: [10, 310, 200, 530] }, // belongs to card 0 (topY 500)
+      { url: 'https://example.com/b', rect: [10, 50, 200, 300] }, // belongs to card 1 (topY 250)
+    ];
+    const urls = matchProductLinks(records, positions, links, PAGE_WIDTH);
+    expect(urls).toEqual(['https://example.com/a', 'https://example.com/b']);
+  });
+
+  test('keeps the largest link when a card has more than one (e.g. a two-fragrance perfume card)', () => {
+    const positions = [{ side: 'left', topY: 500 }, { side: 'left', topY: 250 }];
+    const links = [
+      { url: 'https://example.com/small', rect: [10, 480, 100, 500] }, // small row link
+      { url: 'https://example.com/big', rect: [10, 310, 200, 530] }, // big image link, same card
+    ];
+    const urls = matchProductLinks(records, positions, links, PAGE_WIDTH);
+    expect(urls[0]).toBe('https://example.com/big');
+  });
+
+  test('keeps left/right columns independent, matched by the link rect x-position', () => {
+    const positions = [
+      { side: 'left', topY: 500 },
+      { side: 'right', topY: 500 },
+    ];
+    const links = [
+      { url: 'https://example.com/left', rect: [10, 310, 200, 530] },
+      { url: 'https://example.com/right', rect: [220, 310, 400, 530] },
+    ];
+    const urls = matchProductLinks(records, positions, links, PAGE_WIDTH);
+    expect(urls).toEqual(['https://example.com/left', 'https://example.com/right']);
+  });
+
+  test('leaves a card without a matching link as null', () => {
+    const positions = [{ side: 'left', topY: 500 }, { side: 'left', topY: 250 }];
+    const links = [{ url: 'https://example.com/a', rect: [10, 310, 200, 530] }];
+    const urls = matchProductLinks(records, positions, links, PAGE_WIDTH);
+    expect(urls).toEqual(['https://example.com/a', null]);
+  });
+});
+
 describe('normalizeRecords', () => {
   test('expands one card with several SKUs into one row per SKU', () => {
     const rows = normalizeRecords([{ name: 'Товар', codes: ['1', '2'], price: 100, pv: 1, category: 'X' }]);
     expect(rows).toEqual([
-      { greenway_id: 'pdf-1', name: 'Товар', price: 100, pv: 1, category: 'X' },
-      { greenway_id: 'pdf-2', name: 'Товар', price: 100, pv: 1, category: 'X' },
+      { greenway_id: 'pdf-1', name: 'Товар', price: 100, pv: 1, category: 'X', product_url: null },
+      { greenway_id: 'pdf-2', name: 'Товар', price: 100, pv: 1, category: 'X', product_url: null },
     ]);
   });
 
@@ -149,5 +201,13 @@ describe('normalizeRecords', () => {
     const [rowB] = normalizeRecords([record]);
     expect(rowA.greenway_id).toBe(rowB.greenway_id);
     expect(rowA.greenway_id).toMatch(/^pdf-x-/);
+  });
+
+  test('carries the product page URL onto every SKU row from the same card', () => {
+    const rows = normalizeRecords([
+      { name: 'Товар', codes: ['1', '2'], price: 100, pv: 1, category: 'X', url: 'https://greenwayglobal.com/shop/brands/fiber/1' },
+    ]);
+    expect(rows[0].product_url).toBe('https://greenwayglobal.com/shop/brands/fiber/1');
+    expect(rows[1].product_url).toBe('https://greenwayglobal.com/shop/brands/fiber/1');
   });
 });

@@ -66,6 +66,7 @@ function reconstruct(dp, products, k, pv) {
       pv: p.pv,
       price: p.price,
       quantity,
+      product_url: p.product_url ?? null,
     });
     totalPv += p.pv * quantity;
     totalPrice += p.price * quantity;
@@ -196,7 +197,14 @@ function findMaxPvUnderBudget(products, budget, maxItems) {
   let totalPrice = 0;
   for (const [idx, quantity] of counts.entries()) {
     const p = products[idx];
-    items.push({ product_id: p.id ?? p.greenway_id ?? idx, name: p.name, pv: p.pv, price: p.price, quantity });
+    items.push({
+      product_id: p.id ?? p.greenway_id ?? idx,
+      name: p.name,
+      pv: p.pv,
+      price: p.price,
+      quantity,
+      product_url: p.product_url ?? null,
+    });
     totalPv += p.pv * quantity;
     totalPrice += p.price * quantity;
   }

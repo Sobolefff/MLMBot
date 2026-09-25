@@ -24,13 +24,14 @@ async function syncFromPdfBuffer(buffer) {
 
   const db = getDb();
   const upsert = db.prepare(`
-    INSERT INTO products (greenway_id, name, price, pv, category, image_url, last_updated, is_available)
-    VALUES (@greenway_id, @name, @price, @pv, @category, NULL, CURRENT_TIMESTAMP, 1)
+    INSERT INTO products (greenway_id, name, price, pv, category, image_url, product_url, last_updated, is_available)
+    VALUES (@greenway_id, @name, @price, @pv, @category, NULL, @product_url, CURRENT_TIMESTAMP, 1)
     ON CONFLICT(greenway_id) DO UPDATE SET
       name = excluded.name,
       price = excluded.price,
       pv = excluded.pv,
       category = excluded.category,
+      product_url = excluded.product_url,
       last_updated = CURRENT_TIMESTAMP,
       is_available = 1
   `);

@@ -34,6 +34,12 @@ function classifyFontRole(fontName, height) {
  */
 function buildRecordsFromItems(items, pageWidth, startCategory) {
   const records = [];
+  // Parallel to `records` (same index) - which column the card is in and the
+  // y-coordinate of its name line, i.e. the top of its printed "card". Used
+  // by matchProductLinks to work out where one card ends and the next
+  // begins, without changing the shape of `records` itself (kept separate
+  // so existing callers/tests that check `records` verbatim are unaffected).
+  const positions = [];
   const incomplete = [];
   let category = startCategory || null;
 
@@ -42,20 +48,26 @@ function buildRecordsFromItems(items, pageWidth, startCategory) {
   }
 
   const half = pageWidth / 2;
-  const columns = [items.filter((it) => it.x < half), items.filter((it) => it.x >= half)];
+  const columns = [
+    { side: 'left', items: items.filter((it) => it.x < half) },
+    { side: 'right', items: items.filter((it) => it.x >= half) },
+  ];
 
   for (const col of columns) {
-    const sorted = [...col].sort((a, b) => b.y - a.y || a.x - b.x);
+    const sorted = [...col.items].sort((a, b) => b.y - a.y || a.x - b.x);
     let rec = null;
+    let recTopY = null;
 
     const flush = () => {
       if (!rec) return;
       if (rec.name && rec.priceRub != null && rec.pv != null) {
         records.push({ name: rec.name.trim(), codes: rec.codes, price: rec.priceRub, pv: rec.pv, category });
+        positions.push({ side: col.side, topY: recTopY });
       } else if (rec.name) {
         incomplete.push(rec.name);
       }
       rec = null;
+      recTopY = null;
     };
 
     for (const it of sorted) {
@@ -64,9 +76,11 @@ function buildRecordsFromItems(items, pageWidth, startCategory) {
       if (role === 'name') {
         if (!rec) {
           rec = { name: it.text, codes: [], priceRub: null, pv: null };
+          recTopY = it.y;
         } else if (rec.priceRub != null) {
           flush();
           rec = { name: it.text, codes: [], priceRub: null, pv: null };
+          recTopY = it.y;
         } else if (rec.codes.length === 0) {
           rec.name += ' ' + it.text; // multi-line title continuation
         }
@@ -103,7 +117,59 @@ function buildRecordsFromItems(items, pageWidth, startCategory) {
     flush();
   }
 
-  return { records, category, incomplete };
+  return { records, category, incomplete, positions };
+}
+
+/**
+ * Assigns each product card the (best-guess) URL of its page on
+ * greenwayglobal.com, by matching each PDF link annotation's rectangle to
+ * whichever card's vertical band it falls in - link annotations don't carry
+ * any structured reference back to "this is product X", only a clickable
+ * screen region, so position is the only signal available.
+ *
+ * A card's band runs from its own name line down to the next card's name
+ * line in the same column (or to the bottom of the page for the last card).
+ * Some cards get more than one link (e.g. two-fragrance perfume cards have
+ * one link per fragrance row); when several links land in the same band,
+ * the largest one is kept as "the" link for that card - precision beyond
+ * "a valid link to view this product" isn't needed here.
+ */
+function matchProductLinks(records, positions, links, pageWidth) {
+  const urls = new Array(records.length).fill(null);
+  const half = pageWidth / 2;
+
+  for (const side of ['left', 'right']) {
+    const indices = [];
+    positions.forEach((pos, idx) => {
+      if (pos.side === side) indices.push(idx);
+    });
+    if (indices.length === 0) continue;
+
+    const sideLinks = links.filter((l) => (side === 'left' ? l.rect[0] < half : l.rect[0] >= half));
+    const bestArea = new Array(indices.length).fill(-1);
+
+    for (const link of sideLinks) {
+      const linkTop = Math.max(link.rect[1], link.rect[3]);
+      // Topmost card whose name line is at or above this link's top edge
+      // (small tolerance for the link sitting just above the text).
+      let bandIdx = -1;
+      for (let i = 0; i < indices.length; i++) {
+        if (positions[indices[i]].topY <= linkTop + 5) {
+          bandIdx = i;
+          break;
+        }
+      }
+      if (bandIdx === -1) continue;
+
+      const area = Math.abs(link.rect[2] - link.rect[0]) * Math.abs(link.rect[3] - link.rect[1]);
+      if (area > bestArea[bandIdx]) {
+        bestArea[bandIdx] = area;
+        urls[indices[bandIdx]] = link.url;
+      }
+    }
+  }
+
+  return urls;
 }
 
 /**
@@ -111,6 +177,10 @@ function buildRecordsFromItems(items, pageWidth, startCategory) {
  * a card with several SKU codes still yields a single record with a
  * `codes` array - see normalizeRecords for the per-SKU expansion).
  */
+// Every page repeats a generic link back to the homepage (logo/header) -
+// not useful as a "view this product" link, so it's excluded before matching.
+const HOMEPAGE_LINK_RE = /^https?:\/\/greenwayglobal\.com\/?$/;
+
 async function parsePdfCatalogBuffer(buffer) {
   const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
   const doc = await getDocument({ data: new Uint8Array(buffer) }).promise;
@@ -147,7 +217,12 @@ async function parsePdfCatalogBuffer(buffer) {
 
       const result = buildRecordsFromItems(items, viewport.width, category);
       category = result.category;
-      records.push(...result.records);
+
+      const annotations = await page.getAnnotations();
+      const links = annotations.filter((a) => a.subtype === 'Link' && a.url && !HOMEPAGE_LINK_RE.test(a.url));
+      const urls = matchProductLinks(result.records, result.positions, links, viewport.width);
+
+      result.records.forEach((rec, i) => records.push({ ...rec, url: urls[i] }));
       page.cleanup();
     }
   } finally {
@@ -167,16 +242,23 @@ async function parsePdfCatalogBuffer(buffer) {
 function normalizeRecords(records) {
   const rows = [];
   for (const r of records) {
+    const product_url = r.url ?? null;
     if (r.codes.length === 0) {
       const hash = crypto.createHash('md5').update(r.name).digest('hex').slice(0, 12);
-      rows.push({ greenway_id: `pdf-x-${hash}`, name: r.name, price: r.price, pv: r.pv, category: r.category });
+      rows.push({ greenway_id: `pdf-x-${hash}`, name: r.name, price: r.price, pv: r.pv, category: r.category, product_url });
       continue;
     }
     for (const code of r.codes) {
-      rows.push({ greenway_id: `pdf-${code}`, name: r.name, price: r.price, pv: r.pv, category: r.category });
+      rows.push({ greenway_id: `pdf-${code}`, name: r.name, price: r.price, pv: r.pv, category: r.category, product_url });
     }
   }
   return rows;
 }
 
-module.exports = { classifyFontRole, buildRecordsFromItems, parsePdfCatalogBuffer, normalizeRecords };
+module.exports = {
+  classifyFontRole,
+  buildRecordsFromItems,
+  matchProductLinks,
+  parsePdfCatalogBuffer,
+  normalizeRecords,
+};

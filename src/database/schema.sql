@@ -45,6 +45,9 @@ CREATE TABLE IF NOT EXISTS products (
   category TEXT,
   description TEXT,
   image_url TEXT,
+  -- Ссылка на страницу товара на greenwayglobal.com (из PDF-каталога, см.
+  -- src/catalog/pdfCatalogParser.js) - null для товаров из pyapi-синка.
+  product_url TEXT,
   last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
   is_available BOOLEAN DEFAULT 1
 );
