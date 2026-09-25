@@ -36,6 +36,10 @@ services:
       - ../.env
     volumes:
       - app-data:/app/data
+      # Общий с telegram-bot-api volume (см. TELEGRAM_LOCAL=1 ниже): в
+      # --local режиме getFile отдаёт не HTTP-ссылку, а абсолютный путь
+      # внутри этого каталога - без общего volume бот не смог бы его прочитать.
+      - telegram-bot-api-data:/var/lib/telegram-bot-api:ro
     depends_on:
       - app
       - redis
@@ -45,7 +49,10 @@ services:
   # api.telegram.org в 20 МБ на скачивание файлов ботом (getFile) — без него
   # партнёры не смогут прислать боту PDF-каталог тяжелее 20 МБ (см. README
   # "Self-hosted Bot API сервер"). Требует TELEGRAM_API_ID/TELEGRAM_API_HASH
-  # в .env (https://my.telegram.org/apps) и TELEGRAM_API_ROOT=http://telegram-bot-api:8081.
+  # в .env (https://my.telegram.org/apps), TELEGRAM_API_ROOT=http://telegram-bot-api:8081
+  # и TELEGRAM_LOCAL=1 — без --local сервер молча сохраняет тот же лимит 20 МБ
+  # на getFile, что и облако (проверено на практике). В --local режиме getFile
+  # возвращает путь на диске вместо ссылки, поэтому этот volume расшарен с bot.
   # Если не нужен — можно убрать этот сервис и depends_on выше, оставив
   # TELEGRAM_API_ROOT по умолчанию (https://api.telegram.org).
   telegram-bot-api:

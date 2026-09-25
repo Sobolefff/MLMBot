@@ -103,26 +103,37 @@ npm run gw:sync-catalog
 
 ### Self-hosted Bot API сервер (снимает лимит в 20 МБ)
 
-Облачный `api.telegram.org` не отдаёт боту (`getFile`) файлы тяжелее 20 МБ — это ограничение самого Telegram, а не кода бота. Реальные PDF-каталоги Greenway с фотографиями товаров легко превышают этот размер (например, полный каталог на 199 страниц — около 37 МБ). Чтобы партнёры могли присылать такие файлы напрямую, поднимите свой [self-hosted Bot API сервер](https://github.com/tdlib/telegram-bot-api) — он снимает лимит до ~2000 МБ, и всё остальное в боте работает без изменений (тот же `BOT_TOKEN`, та же логика скачивания файла).
+Облачный `api.telegram.org` не отдаёт боту (`getFile`) файлы тяжелее 20 МБ — это ограничение самого Telegram, а не кода бота. Реальные PDF-каталоги Greenway с фотографиями товаров легко превышают этот размер (например, полный каталог на 199 страниц — около 37 МБ). Чтобы партнёры могли присылать такие файлы напрямую, поднимите свой [self-hosted Bot API сервер](https://github.com/tdlib/telegram-bot-api).
+
+⚠️ **Важный нюанс, подтверждённый на практике**: сам по себе self-hosted сервер лимит в 20 МБ на `getFile` **не снимает** — он молча ведёт себя как облако, пока не запущен с флагом `--local`. Только `--local` реально поднимает потолок до ~2000 МБ. В этом режиме `getFile` возвращает не HTTP-ссылку на файл, а путь к нему на диске — поэтому боту нужен доступ к тому же диску, что и у `telegram-bot-api` (общий volume; в `docker/docker-compose.yml` это уже настроено). Код бота (`src/bot/handlers/catalog.js`) сам определяет, что перед ним путь на диске, а не ссылка, и читает файл напрямую.
 
 1. Получите `api_id`/`api_hash` на [my.telegram.org/apps](https://my.telegram.org/apps) (раздел «API development tools») — это отдельные от `BOT_TOKEN` учётные данные приложения, привязанные к вашему телефонному номеру. Их может получить только владелец аккаунта — сгенерировать их за вас нельзя.
-2. Впишите их в `.env`:
+2. Впишите их в `.env` вместе с `TELEGRAM_LOCAL=1`:
    ```bash
    TELEGRAM_API_ID=...
    TELEGRAM_API_HASH=...
+   TELEGRAM_LOCAL=1
    ```
 3. Укажите адрес self-hosted сервера в `TELEGRAM_API_ROOT`:
-   - при запуске через `docker compose` (сервис `telegram-bot-api` уже есть в `docker/docker-compose.yml`):
+   - при запуске через `docker compose` (сервис `telegram-bot-api` уже есть в `docker/docker-compose.yml`, volume с ним уже расшарен с `bot`):
      ```bash
      TELEGRAM_API_ROOT=http://telegram-bot-api:8081
      ```
-   - при запуске бота напрямую на сервере, где отдельно поднят `telegram-bot-api`:
+   - при запуске бота напрямую на сервере, где отдельно поднят `telegram-bot-api` **на той же машине** (в `--local` режиме бот должен читать файлы с локального диска, поэтому сервер и бот обязаны быть на одном хосте):
      ```bash
      TELEGRAM_API_ROOT=http://localhost:8081
      ```
-4. Перезапустите (`docker compose -f docker/docker-compose.yml up -d --build` — сервис `telegram-bot-api` поднимется вместе с остальными; либо, для bare-metal, поднимите `telegram-bot-api` отдельно по [официальной инструкции](https://github.com/tdlib/telegram-bot-api#usage) и перезапустите `npm run bot`).
+4. Перезапустите **и пересоздайте** контейнеры, а не просто перезапустите — Docker Compose не подхватывает изменения `.env` в уже запущенные контейнеры сами по себе:
+   ```bash
+   docker compose -f docker/docker-compose.yml up -d --force-recreate
+   ```
+   (для bare-metal — поднимите `telegram-bot-api` отдельно с флагом `--local` по [официальной инструкции](https://github.com/tdlib/telegram-bot-api#usage) и перезапустите `npm run bot`).
+5. Проверьте, что флаг реально применился — в логе `telegram-bot-api` должна появиться строка запуска с `--local`:
+   ```bash
+   docker compose -f docker/docker-compose.yml logs telegram-bot-api
+   ```
 
-Если `TELEGRAM_API_ROOT` не задан (или равен `https://api.telegram.org` по умолчанию) — бот продолжает работать как раньше, просто с лимитом Telegram в 20 МБ на файлы. Собственный потолок бота сверху (`MAX_PDF_UPLOAD_MB` в `.env`, по умолчанию 150 МБ) действует независимо — это защита от случайно присланного гигантского файла, а не то, что снимает self-hosted сервер.
+Если `TELEGRAM_API_ROOT` не задан (или равен `https://api.telegram.org` по умолчанию) — бот продолжает работать как раньше, просто с лимитом Telegram в 20 МБ на файлы. Собственный потолок бота сверху (`MAX_PDF_UPLOAD_MB` в `.env`, по умолчанию 150 МБ) действует независимо от режима self-hosted сервера — это защита от случайно присланного гигантского файла.
 
 ## Деплой
 
