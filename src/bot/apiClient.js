@@ -1,6 +1,6 @@
 const config = require('../config');
 
-const BASE_URL = `http://localhost:${config.port}/api/v1`;
+const BASE_URL = config.apiBaseUrl;
 
 async function request(path, { method = 'GET', body, token } = {}) {
   const res = await fetch(`${BASE_URL}${path}`, {

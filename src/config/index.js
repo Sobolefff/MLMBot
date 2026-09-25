@@ -31,6 +31,13 @@ function assertProductionSecrets() {
 module.exports = {
   botToken: process.env.BOT_TOKEN || '',
   port: parseInt(process.env.PORT, 10) || 3000,
+  // The bot process talks to the API process over HTTP (see src/bot/apiClient.js).
+  // On a single host (bare-metal `npm start` + `npm run bot`) they share
+  // localhost, so the default below just works. Under docker-compose, `app`
+  // and `bot` are separate containers with separate network namespaces -
+  // "localhost" inside the bot container is the bot container itself, not
+  // `app` - so this MUST be overridden there, e.g. http://app:3000/api/v1.
+  apiBaseUrl: process.env.API_BASE_URL || `http://localhost:${parseInt(process.env.PORT, 10) || 3000}/api/v1`,
   // Cloud api.telegram.org hard-caps file downloads (getFile) at 20 MB
   // regardless of anything we configure. Pointing this at a self-hosted
   // telegram-bot-api server (docker/docker-compose.yml, service
