@@ -6,6 +6,7 @@ const { registerPvCalcHandler } = require('./handlers/pvCalc');
 const { registerChainsHandler } = require('./handlers/chains');
 const { registerDeadlinesHandler } = require('./handlers/deadlines');
 const { registerSettingsHandler } = require('./handlers/settings');
+const { registerCatalogHandler } = require('./handlers/catalog');
 
 config.assertProductionSecrets();
 
@@ -23,6 +24,7 @@ registerPvCalcHandler(bot);
 registerChainsHandler(bot);
 registerDeadlinesHandler(bot);
 registerSettingsHandler(bot);
+registerCatalogHandler(bot);
 
 bot.hears('❓ Помощь', (ctx) =>
   ctx.reply(
@@ -30,7 +32,8 @@ bot.hears('❓ Помощь', (ctx) =>
       '/start — регистрация\n' +
       '📊 PV-Подборщик — подбор товаров под целевой PV/сумму\n' +
       '🔔 Мои цепочки — статус клиентов\n' +
-      '⏰ Сроки — активные дедлайны'
+      '⏰ Сроки — активные дедлайны\n' +
+      '📎 Пришлите PDF-каталог Greenway файлом — бот обновит базу товаров'
   )
 );
 

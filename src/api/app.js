@@ -7,6 +7,7 @@ const partnersRoutes = require('./routes/partners');
 const pvCalcRoutes = require('./routes/pvCalc');
 const chainsRoutes = require('./routes/chains');
 const deadlinesRoutes = require('./routes/deadlines');
+const catalogRoutes = require('./routes/catalog');
 
 function createApp() {
   const app = express();
@@ -36,6 +37,7 @@ function createApp() {
   app.use('/api/v1/pv-calc', pvCalcRoutes);
   app.use('/api/v1/chains', chainsRoutes);
   app.use('/api/v1/deadlines', deadlinesRoutes);
+  app.use('/api/v1/catalog', catalogRoutes);
 
   app.use((err, req, res, next) => {
     // eslint-disable-next-line no-console
